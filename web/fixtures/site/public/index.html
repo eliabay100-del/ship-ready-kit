@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Ship-ready fixture — launch gate demo</title>
+  <meta name="description" content="A small reference site that passes every launch check: SEO, accessibility, consent, links, and performance.">
+  <link rel="canonical" href="http://localhost:4173/">
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+  <meta property="og:title" content="Ship-ready fixture — launch gate demo">
+  <meta property="og:description" content="A small reference site that passes every launch check: SEO, accessibility, consent, links, and performance.">
+  <meta property="og:image" content="http://localhost:4173/og.svg">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:url" content="http://localhost:4173/">
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="Ship-ready fixture">
+  <meta name="twitter:card" content="summary_large_image">
+  <style>
+    * { box-sizing: border-box; }
+    body { font-family: system-ui, Arial, sans-serif; margin: 0; color: #111; background: #fff; line-height: 1.6; }
+    img { max-width: 100%; height: auto; }
+    header { border-bottom: 1px solid #ddd; padding: 12px 24px; }
+    nav a { display: inline-block; padding: 8px 10px; color: #0b3d91; }
+    main { max-width: 760px; margin: 0 auto; padding: 32px 24px 64px; }
+    h1 { font-size: 2rem; line-height: 1.2; }
+    .cta { display: inline-block; background: #0f172a; color: #fff; padding: 14px 24px; border-radius: 6px; text-decoration: none; font-weight: 600; }
+    .cta:focus-visible, a:focus-visible, button:focus-visible, summary:focus-visible { outline: 3px solid #b45309; outline-offset: 2px; }
+    details { border-bottom: 1px solid #e5e5e5; padding: 8px 0; }
+    summary { cursor: pointer; font-weight: 600; }
+    footer { border-top: 1px solid #ddd; padding: 24px; font-size: 0.9rem; }
+    #cookie-banner { position: fixed; inset: auto 16px 16px 16px; background: #fff; border: 1px solid #999; padding: 16px; box-shadow: 0 4px 24px rgba(0,0,0,.15); }
+    #cookie-banner button { padding: 12px 20px; margin-right: 8px; font-size: 1rem; }
+    [hidden] { display: none !important; }
+  </style>
+</head>
+<body>
+  <header>
+    <nav aria-label="Main">
+      <a href="/">Home</a>
+      <a href="/pricing">Pricing</a>
+      <a href="/faq">FAQ</a>
+      <a href="/contact">Contact</a>
+    </nav>
+  </header>
+
+  <main>
+    <h1>Ship it without the 3am page</h1>
+    <p>This fixture exists to prove the audit suite passes a site that does the basics correctly. It is deliberately small, fast, and boring.</p>
+    <p><a class="cta" href="/pricing">Get started</a></p>
+
+    <h2>A preview image</h2>
+    <img src="/og.svg" alt="Dark blue card with the words ship-ready fixture" width="600" height="315">
+
+    <h2>Frequently asked questions</h2>
+    <details>
+      <summary>What does this fixture prove?</summary>
+      <p>That the crawler, SEO, accessibility, mobile, consent, and performance specs can all go green on a correct site.</p>
+    </details>
+    <details>
+      <summary>Why not test against production?</summary>
+      <p>Because load, chaos, and consent tests create traffic and state. Staging is for breaking things.</p>
+    </details>
+    <details>
+      <summary>Does it cover the backend?</summary>
+      <p>No. The distributed kit handles invariants, queues, and failure modes.</p>
+    </details>
+    <details>
+      <summary>How are accessibility issues found?</summary>
+      <p>Automated axe rules cover roughly a third of WCAG. Keyboard and screen-reader passes cover the rest.</p>
+    </details>
+    <details>
+      <summary>What happens on a failed release?</summary>
+      <p>Roll back first, then diagnose. The kill criteria are agreed before launch, not during an incident.</p>
+    </details>
+  </main>
+
+  <footer>
+    <a href="/privacy">Privacy Policy</a> · <a href="/terms">Terms</a> · <a href="/contact">Contact</a>
+  </footer>
+
+  <div id="cookie-banner" role="dialog" aria-label="Cookie consent">
+    <p>We use cookies for analytics. You can accept or reject them.</p>
+    <button id="accept-consent" type="button">Accept all</button>
+    <button id="reject-consent" type="button">Reject all</button>
+  </div>
+
+  <script>
+    (function () {
+      var KEY = 'cookie-consent';
+      var banner = document.getElementById('cookie-banner');
+
+      function loadAnalytics() {
+        if (document.getElementById('ga')) return;
+        var s = document.createElement('script');
+        s.id = 'ga';
+        s.async = true;
+        s.src = 'https://www.googletagmanager.com/gtag/js?id=G-FIXTURE';
+        document.head.appendChild(s);
+      }
+
+      var saved = localStorage.getItem(KEY);
+      if (saved) {
+        banner.hidden = true;
+        if (saved === 'accepted') loadAnalytics();
+      }
+
+      document.getElementById('accept-consent').addEventListener('click', function () {
+        localStorage.setItem(KEY, 'accepted');
+        banner.hidden = true;
+        loadAnalytics();
+      });
+
+      document.getElementById('reject-consent').addEventListener('click', function () {
+        localStorage.setItem(KEY, 'rejected');
+        banner.hidden = true;
+      });
+    })();
+  </script>
+</body>
+</html>

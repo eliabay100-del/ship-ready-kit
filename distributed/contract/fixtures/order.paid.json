@@ -1,0 +1,12 @@
+{
+  "id": "ord_01HZX8K4T9",
+  "status": "paid",
+  "amount": 4500,
+  "currency": "USD",
+  "createdAt": "2026-01-15T10:00:00.000Z",
+  "items": [
+    { "sku": "SKU-1", "quantity": 2, "unitAmount": 2000 },
+    { "sku": "SKU-2", "quantity": 1, "unitAmount": 500 }
+  ],
+  "metadata": { "source": "web" }
+}

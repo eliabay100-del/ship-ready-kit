@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>FAQ — ship-ready fixture answers</title>
+  <meta name="description" content="Answers to the questions the audit suite asks: what is covered, what is manual, and why staging is the right place to break things.">
+  <link rel="canonical" href="http://localhost:4173/faq">
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+  <meta property="og:title" content="FAQ — ship-ready fixture answers">
+  <meta property="og:description" content="Answers to the questions the audit suite asks: what is covered, what is manual, and why staging is the right place to break things.">
+  <meta property="og:image" content="http://localhost:4173/og.svg">
+  <meta property="og:url" content="http://localhost:4173/faq">
+  <meta property="og:type" content="website">
+  <meta name="twitter:card" content="summary_large_image">
+  <style>
+    * { box-sizing: border-box; }
+    body { font-family: system-ui, Arial, sans-serif; margin: 0; color: #111; background: #fff; line-height: 1.6; }
+    header { border-bottom: 1px solid #ddd; padding: 12px 24px; }
+    nav a { display: inline-block; padding: 8px 10px; color: #0b3d91; }
+    main { max-width: 760px; margin: 0 auto; padding: 32px 24px 64px; }
+    details { border-bottom: 1px solid #e5e5e5; padding: 8px 0; }
+    summary { cursor: pointer; font-weight: 600; }
+    summary:focus-visible { outline: 3px solid #b45309; }
+    footer { border-top: 1px solid #ddd; padding: 24px; font-size: 0.9rem; }
+  </style>
+</head>
+<body>
+  <header>
+    <nav aria-label="Main">
+      <a href="/">Home</a>
+      <a href="/pricing">Pricing</a>
+      <a href="/faq">FAQ</a>
+      <a href="/contact">Contact</a>
+    </nav>
+  </header>
+  <main>
+    <h1>Frequently asked questions</h1>
+    <details><summary>Is this fixture a real product?</summary><p>No. It is a control group for the test suite.</p></details>
+    <details><summary>What is intentionally missing?</summary><p>Forms, an app, and a database. Those are covered by the distributed kit.</p></details>
+    <details><summary>Why does consent live in the footer?</summary><p>It does not; the banner is a fixed dialog. The footer links the policies.</p></details>
+    <details><summary>Can I run this in CI?</summary><p>Yes. Start the server, set SITE_URL, and run Playwright.</p></details>
+    <details><summary>Does a green run mean the site is good?</summary><p>No. It means the checks that exist did not find these specific problems.</p></details>
+  </main>
+  <footer><a href="/privacy">Privacy Policy</a> · <a href="/terms">Terms</a></footer>
+</body>
+</html>

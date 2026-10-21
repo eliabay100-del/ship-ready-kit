@@ -1,0 +1,69 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  web:
+    name: Site checklist (Playwright)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Run the suite against the reference site
+        run: npm run test:fixtures -- --reporter=github
+
+  systems:
+    name: Systems checklist (matrix + contract)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: distributed
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: distributed/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Validate the 53-row matrix
+        run: npm run validate:matrix
+
+      - name: Contract suite (skip mode without staging credentials)
+        run: npm run contract

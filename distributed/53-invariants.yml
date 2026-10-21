@@ -1,0 +1,704 @@
+# Ship-ready invariant matrix
+# One row per concept from systems checklist. Each row is a testable claim, not a topic.
+# Fields:
+#   invariant  - what must always be true (the oracle)
+#   break_it   - the fault/load you inject to try to falsify it
+#   assert     - observable evidence that it held
+#   tooling    - minimum viable toolchain
+# Rule: a row is "covered" only when it has an automated check in CI or a
+# scheduled drill with a recorded result. Otherwise it is "documented", not tested.
+
+meta:
+  version: 1
+  source: "systems-checklist-53"
+  levels: [unit, integration, contract, e2e, load, chaos, drill]
+  gate: "block release on any P0/P1 row failing; P2 rows may be waived with an owner and a date"
+
+invariants:
+  - id: 1
+    name: Rate Limiting
+    layer: edge
+    priority: P0
+    invariant: "Per key and per tenant, accepted traffic never exceeds N/window; excess gets 429 + Retry-After and consumes no downstream capacity."
+    break_it: "k6 constant-arrival-rate at 5x the limit for 3 minutes, from 2 tenants."
+    assert:
+      - "429 ratio > 0.6 once above limit"
+      - "p95 latency of accepted requests within 10% of baseline"
+      - "no 5xx anywhere"
+      - "Retry-After present and <= window"
+      - "tenant B unaffected while tenant A is throttled"
+    tooling: "k6, Prometheus, redis-cli"
+
+  - id: 2
+    name: Caching
+    layer: data
+    priority: P1
+    invariant: "A cached GET is served from cache within TTL, never older than TTL, and a miss storm collapses into one origin fetch."
+    break_it: "Repeat GETs; mutate the row behind the cache; fire 200 concurrent cold requests."
+    assert:
+      - "X-Cache HIT after warm-up"
+      - "cache age <= TTL at all times"
+      - "origin calls == 1 for 200 concurrent misses (single-flight)"
+      - "no stale data after the documented TTL"
+    tooling: "k6, redis-cli, origin access logs"
+
+  - id: 3
+    name: Load Balancing
+    layer: edge
+    priority: P0
+    invariant: "Traffic is spread across healthy backends within tolerance and draining a node drops zero in-flight requests."
+    break_it: "200 rps steady; SIGTERM one backend; then kill -9 another."
+    assert:
+      - "per-node share within +/-20% of expected"
+      - "zero 5xx during graceful drain"
+      - "unhealthy node removed within 2 health-check intervals"
+      - "connections re-established, not leaked"
+    tooling: "k6, HAProxy/Envoy stats, kubectl"
+
+  - id: 4
+    name: Reverse Proxies
+    layer: edge
+    priority: P1
+    invariant: "The proxy preserves end-to-end semantics, enforces body/timeout limits, and never trusts a client-supplied X-Forwarded-For beyond the trusted hop count."
+    break_it: "100 MB body, slowloris headers, hop-by-hop headers, spoofed XFF, duplicate Host."
+    assert:
+      - "413/408/400 as appropriate, never 5xx"
+      - "no Connection/Transfer-Encoding leakage upstream"
+      - "client IP resolves to the real hop, spoof ignored"
+      - "request line and header size limits enforced"
+    tooling: "curl, h2c smuggling scripts, proxy logs"
+
+  - id: 5
+    name: API Gateways
+    layer: edge
+    priority: P0
+    invariant: "No unauthenticated, malformed, over-quota, or unknown-route request reaches an upstream service."
+    break_it: "Missing/expired token, wrong content-type, 10 MB JSON, unknown path, quota exhaustion."
+    assert:
+      - "401/403/415/413/404 at the gateway"
+      - "upstream request counter stays at 0 for rejected calls"
+      - "quota headers match policy"
+      - "schema validation rejects extra fields when strict"
+    tooling: "k6, gateway access logs, OpenAPI validator"
+
+  - id: 6
+    name: CI/CD
+    layer: delivery
+    priority: P0
+    invariant: "Every commit on main is reproducibly buildable, every deployable artifact is immutable and traceable to a commit, and the pipeline fails closed."
+    break_it: "Open a PR with a failing test, a flaky test, a committed secret, and an unsigned artifact."
+    assert:
+      - "merge blocked on red and on missing approvals"
+      - "same commit produces the same image digest"
+      - "provenance/SBOM attestation attached"
+      - "rollback job completes < 10 min"
+    tooling: "GitHub Actions, cosign, syft, gitleaks"
+
+  - id: 7
+    name: Docker
+    layer: delivery
+    priority: P0
+    invariant: "Images are minimal, pinned by digest, run non-root with a read-only rootfs, and contain no secrets in any layer."
+    break_it: "trivy image, docker history --no-trunc, run as uid 0, scan for .env."
+    assert:
+      - "0 critical/high CVEs with a fix available"
+      - "uid != 0 and no added capabilities"
+      - "read-only rootfs + tmpfs works"
+      - "image size within budget; base image pinned by digest"
+    tooling: "trivy, dive, syft, hadolint"
+
+  - id: 8
+    name: Kubernetes
+    layer: runtime
+    priority: P0
+    invariant: "Rollouts are zero-downtime, workloads declare probes/limits/PDB, and admission policy blocks privileged or unlabelled pods."
+    break_it: "kubectl rollout restart under load; drain a node; apply a privileged pod and a pod without limits."
+    assert:
+      - "zero 5xx during rollout"
+      - "readiness gates traffic; liveness does not kill slow starters"
+      - "PDB respected during drain"
+      - "Kyverno/OPA denies non-compliant manifests"
+    tooling: "kubectl, k6, Kyverno, kube-bench"
+
+  - id: 9
+    name: Service Discovery
+    layer: runtime
+    priority: P1
+    invariant: "New instances receive traffic within seconds, dead instances stop receiving traffic within seconds, and no request is routed to a stale address."
+    break_it: "Scale 2->6->2 while traffic runs; kill an instance without graceful shutdown."
+    assert:
+      - "registration < 5 s, deregistration < 10 s"
+      - "zero connection-refused spikes"
+      - "DNS TTL and resolver caching behave as documented"
+    tooling: "kubectl, Consul/etcd, k6"
+
+  - id: 10
+    name: Circuit Breakers
+    layer: resilience
+    priority: P0
+    invariant: "A failing dependency trips the breaker, calls fail fast, and recovery is automatic without a deploy."
+    break_it: "Toxiproxy: 100% errors on the dependency for 30 s, then heal."
+    assert:
+      - "breaker opens within configured failure count"
+      - "rejected calls return in < 20 ms"
+      - "no thread/connection pool exhaustion"
+      - "half-open allows a single probe, then closes on success"
+    tooling: "Toxiproxy, resilience4j/polly, metrics"
+
+  - id: 11
+    name: Timeouts
+    layer: resilience
+    priority: P0
+    invariant: "Every network call has a deadline shorter than its caller's, and cancellation propagates so no orphan work continues."
+    break_it: "Toxiproxy latency 10 s against a 2 s timeout; client disconnect mid-request."
+    assert:
+      - "response in <= timeout + 50 ms"
+      - "upstream work cancelled (no write after disconnect)"
+      - "504/503 mapped, not 500 stack traces"
+      - "deadline budget decreases at each hop"
+    tooling: "Toxiproxy, OpenTelemetry spans"
+
+  - id: 12
+    name: Retries
+    layer: resilience
+    priority: P0
+    invariant: "Only retryable, idempotent operations are retried; attempts are bounded; retries never amplify an outage."
+    break_it: "Dependency returns 503 twice then 200. Send a non-idempotent POST through the same path."
+    assert:
+      - "exactly max-attempts calls"
+      - "POST without idempotency key is not retried"
+      - "total wall time bounded by attempts x timeout"
+      - "retry budget caps retry traffic at a % of base"
+    tooling: "Toxiproxy, WireMock, k6"
+
+  - id: 13
+    name: Exponential Backoff
+    layer: resilience
+    priority: P1
+    invariant: "Delays grow exponentially with jitter and a hard cap, so 1000 clients failing together do not retry in lockstep."
+    break_it: "1,000 VUs hit a failing endpoint simultaneously, then it recovers."
+    assert:
+      - "delay_n ~ base * 2^n with jitter, capped"
+      - "no >20% of retries land in the same 50 ms bucket"
+      - "recovery completes without a second overload"
+    tooling: "k6, client-side logs, histogram"
+
+  - id: 14
+    name: Idempotency
+    layer: data
+    priority: P0
+    invariant: "N requests with the same idempotency key cause exactly one side effect, and repeats return the original result."
+    break_it: "50 concurrent POSTs with the same key; then replay after 24 h; then reuse the key with a different body."
+    assert:
+      - "exactly 1 row/charge/order created"
+      - "identical response for repeats"
+      - "409 on same key + different payload"
+      - "key expiring per documented TTL"
+    tooling: "k6, SQL asserts, fast-check"
+
+  - id: 15
+    name: Message Queues
+    layer: async
+    priority: P0
+    invariant: "No message is lost on consumer crash; delivery is at-least-once; ack happens only after the side effect commits."
+    break_it: "Kill -9 a consumer mid-handler while 10k messages are in flight."
+    assert:
+      - "published == consumed + DLQ after drain"
+      - "duplicates are handled idempotently"
+      - "queue depth returns to 0"
+      - "prefetch/visibility timeout bounded"
+    tooling: "RabbitMQ/SQS, docker compose, k6"
+
+  - id: 16
+    name: Pub/Sub
+    layer: async
+    priority: P1
+    invariant: "Every subscriber receives every event independently; one slow subscriber cannot block the others."
+    break_it: "One subscriber sleeps 30 s while a 5k-event burst is published."
+    assert:
+      - "per-subscriber delivery p99 within budget"
+      - "no head-of-line blocking across subscribers"
+      - "at-least-once honored"
+      - "ordering per key when the contract promises it"
+    tooling: "Kafka/Redis pubsub, k6, consumer lag metrics"
+
+  - id: 17
+    name: Event-Driven Architecture
+    layer: async
+    priority: P1
+    invariant: "Events are immutable and versioned, consumers tolerate unknown fields, and replaying history converges to the same state."
+    break_it: "Publish a v2 event with a new field; replay 24 h of events into a fresh consumer."
+    assert:
+      - "old consumers do not crash on unknown fields"
+      - "replay produces the same aggregate state"
+      - "outbox/CDC means no dual-write window"
+      - "schema registry reports backward compatibility"
+    tooling: "Kafka, schema registry, snapshot diff"
+
+  - id: 18
+    name: Distributed Transactions
+    layer: data
+    priority: P0
+    invariant: "A cross-service write is all-or-nothing from the user's perspective; partial state is never observable."
+    break_it: "Kill service B after A commits, before B commits."
+    assert:
+      - "invariant sum (debits == credits) holds"
+      - "compensation or 2PC recovery completes"
+      - "no intermediate state visible to readers"
+      - "stuck transactions alert within 1 min"
+    tooling: "Toxiproxy, SQL invariant queries, Tempo"
+
+  - id: 19
+    name: Saga Pattern
+    layer: async
+    priority: P0
+    invariant: "Every saga step has a compensating action, saga state is durable, and abandoned sagas are detected and resolved."
+    break_it: "Fail step 3 of 5 after steps 1-2 committed; kill the orchestrator mid-saga."
+    assert:
+      - "compensations run in reverse order"
+      - "no orphaned reservation/payment"
+      - "saga resumes after orchestrator restart"
+      - "timeout alert fires for stuck sagas"
+    tooling: "Temporal/Camunda, SQL asserts, chaos kill"
+
+  - id: 20
+    name: Dead Letter Queues
+    layer: async
+    priority: P1
+    invariant: "A poison message leaves the main queue after max attempts, lands in the DLQ with full context, and can be replayed after a fix."
+    break_it: "Publish a malformed message; then fix the consumer and replay the DLQ."
+    assert:
+      - "message appears in DLQ with original headers/body"
+      - "no infinite redelivery"
+      - "DLQ depth alert fires"
+      - "replay reprocesses successfully"
+    tooling: "RabbitMQ/SQS, consumer logs, alertmanager"
+
+  - id: 21
+    name: Cron Jobs
+    layer: async
+    priority: P0
+    invariant: "A scheduled job runs exactly once per tick across replicas, never overlaps itself, and missed ticks follow a documented catch-up policy."
+    break_it: "Run 3 replicas; kill one mid-run; move the clock past a tick."
+    assert:
+      - "one execution per tick (distributed lock)"
+      - "overlap prevented by lock TTL + heartbeat"
+      - "catch-up is idempotent by date key"
+      - "missed run alerts"
+    tooling: "Kubernetes CronJob, Redis/Postgres lock, clock skew tests"
+
+  - id: 22
+    name: WebSockets
+    layer: realtime
+    priority: P0
+    invariant: "Connections are authenticated, heartbeated, bounded in number, and reconnect without losing or duplicating messages."
+    break_it: "10k connections, idle 5 min, restart a node, connect with an expired token."
+    assert:
+      - "ping/pong within interval; dead conns reaped"
+      - "reconnect < 5 s with backoff"
+      - "sequence numbers allow gap-free resume"
+      - "401 on bad/expired token"
+      - "per-connection memory stable over 1 h"
+    tooling: "k6/ws, Artillery, Prometheus"
+
+  - id: 23
+    name: Long Polling
+    layer: realtime
+    priority: P1
+    invariant: "Held requests have a server-side timeout, release immediately on event, and cannot exhaust the worker pool."
+    break_it: "5k idle polls; burst 1k events; kill the event source."
+    assert:
+      - "hold time <= configured timeout"
+      - "worker/thread saturation bounded"
+      - "event delivery p95 within budget"
+      - "no duplicate delivery after timeout+retry"
+    tooling: "k6, load balancer metrics"
+
+  - id: 24
+    name: Server-Sent Events
+    layer: realtime
+    priority: P1
+    invariant: "SSE streams are unbuffered through proxies, bounded per connection, and resume from Last-Event-ID without gaps."
+    break_it: "5k streams through a buffering proxy; disconnect and resume; leave idle for 10 min."
+    assert:
+      - "content-type text/event-stream, no proxy buffering"
+      - "heartbeat keeps intermediaries open"
+      - "resume has no gaps or dupes"
+      - "memory per connection bounded"
+    tooling: "k6, nginx/Envoy config, curl"
+
+  - id: 25
+    name: Database Indexing
+    layer: data
+    priority: P1
+    invariant: "Every hot query has a supporting index; no sequential scan on a large table in the request path."
+    break_it: "EXPLAIN ANALYZE the top 20 queries after 10x data growth."
+    assert:
+      - "index scan, not seq scan, on tables > 100k rows"
+      - "rows examined / rows returned < 100"
+      - "write amplification acceptable"
+      - "unused indexes reported"
+    tooling: "pg_stat_statements, EXPLAIN, pgHero"
+
+  - id: 26
+    name: Query Optimization
+    layer: data
+    priority: P1
+    invariant: "p95 query time stays within budget and the plan does not regress silently after stats or schema changes."
+    break_it: "ANALYZE with skewed data; run the top queries after 10x growth."
+    assert:
+      - "p95 < 50 ms for OLTP queries"
+      - "no temp file spill > 10 MB"
+      - "plan regression test fails on change"
+      - "slow query log empty"
+    tooling: "pg_stat_statements, pgMustard, CI plan diff"
+
+  - id: 27
+    name: N+1 Queries
+    layer: data
+    priority: P0
+    invariant: "Query count per request is O(1) in page size, not O(n)."
+    break_it: "Request the list endpoint with page size 1 and 100."
+    assert:
+      - "query count constant or logarithmic"
+      - "latency scales sublinearly with page size"
+      - "ORM eager-loading verified by query log"
+    tooling: "query counter middleware, k6, Datadog DBM"
+
+  - id: 28
+    name: Connection Pooling
+    layer: data
+    priority: P0
+    invariant: "Pool size is bounded below the database max_connections, waits are bounded, and errors return connections."
+    break_it: "10x concurrent requests; restart the DB; cancel requests mid-query."
+    assert:
+      - "no 'too many clients' errors"
+      - "acquire timeout is enforced"
+      - "pool returns to baseline after load"
+      - "no session-state leakage in transaction pooling"
+    tooling: "PgBouncer, pg_stat_activity, k6"
+
+  - id: 29
+    name: Read Replicas
+    layer: data
+    priority: P1
+    invariant: "Reads tolerate a bounded replication lag, critical reads see your own writes, and replica failure does not break the site."
+    break_it: "Inject 30 s replica lag; stop a replica; write then immediately read."
+    assert:
+      - "read-your-writes on critical paths"
+      - "stale reads bounded by documented lag"
+      - "automatic failover, no 5xx"
+      - "lag returns to 0 after heal"
+    tooling: "Aurora/RDS, pg_last_wal_replay_lsn, k6"
+
+  - id: 30
+    name: Sharding
+    layer: data
+    priority: P2
+    invariant: "Shard keys distribute uniformly, cross-shard work is bounded, and resharding moves < 1/N of data with no downtime."
+    break_it: "Create one hot tenant; add a shard; run a cross-shard report."
+    assert:
+      - "chi-square uniformity across shards"
+      - "hottest shard < 2x mean"
+      - "fan-out width capped"
+      - "consistent hashing moves only the new shard share"
+    tooling: "shard routing logs, data skew report"
+
+  - id: 31
+    name: Partitioning
+    layer: data
+    priority: P1
+    invariant: "Queries prune to the relevant partitions, retention detaches old data, and no query scans all partitions."
+    break_it: "Query without the partition key; run retention; check the default partition."
+    assert:
+      - "only target partitions in the plan"
+      - "retention drops/detaches, never DELETE millions"
+      - "default partition stays empty"
+      - "constraint exclusion proven by EXPLAIN"
+    tooling: "Postgres declarative partitioning, EXPLAIN"
+
+  - id: 32
+    name: Replication
+    layer: data
+    priority: P0
+    invariant: "Failover meets the stated RPO/RTO, committed data survives, and the replica catches up after heal."
+    break_it: "Kill the primary under write load; promote; reconnect clients."
+    assert:
+      - "committed rows preserved (sync) or loss <= RPO (async)"
+      - "failover < RTO"
+      - "lag returns to 0"
+      - "clients reconnect without manual intervention"
+    tooling: "Patroni/Managed PG, pgbench, drill log"
+
+  - id: 33
+    name: Leader Election
+    layer: data
+    priority: P0
+    invariant: "At most one leader exists at any time, election completes within budget, and a deposed leader cannot write (fencing)."
+    break_it: "Partition the leader from the quorum; pause it with SIGSTOP then resume."
+    assert:
+      - "no split-brain writes"
+      - "fencing token rejects stale leader"
+      - "election < 10 s"
+      - "old leader steps down and rejoins as follower"
+    tooling: "etcd/ZooKeeper, network partition (iptables), logs"
+
+  - id: 34
+    name: CAP Theorem
+    layer: data
+    priority: P1
+    invariant: "During a partition the system exhibits the documented trade-off (CP or AP) and never silently diverges."
+    break_it: "Cut the network between zones for 60 s under write load."
+    assert:
+      - "CP: clear timeout/5xx, no divergent writes"
+      - "AP: stale reads carry version/consistency metadata"
+      - "state converges after heal"
+      - "behavior matches the runbook"
+    tooling: "toxiproxy/iptables, invariant checker"
+
+  - id: 35
+    name: Eventual Consistency
+    layer: data
+    priority: P1
+    invariant: "Replicas converge within a documented bound; reads are monotonic per client; conflict resolution is deterministic."
+    break_it: "Concurrent writes from two regions, then heal; read from both sides during the window."
+    assert:
+      - "convergence <= documented bound"
+      - "no lost updates"
+      - "deterministic conflict resolution (LWW/CRDT)"
+      - "tombstones/version vectors correct"
+    tooling: "multi-region compose, convergence checker"
+
+  - id: 36
+    name: Optimistic Locking
+    layer: data
+    priority: P0
+    invariant: "With concurrent updates to the same version, exactly one wins; the loser gets a conflict, never a lost update."
+    break_it: "100 parallel PATCHes with the same version field."
+    assert:
+      - "1 success, 99 x 409/412"
+      - "final version == initial + 1"
+      - "no field overwritten"
+      - "client retry path succeeds"
+    tooling: "k6, SQL asserts"
+
+  - id: 37
+    name: Pessimistic Locking
+    layer: data
+    priority: P1
+    invariant: "Locks are always released (including on crash), waits are bounded, and lock contention cannot take down the API."
+    break_it: "Hold a lock, kill the client mid-transaction; hammer the same row."
+    assert:
+      - "lock released on disconnect"
+      - "lock_timeout enforced"
+      - "deadlocks detected and retried"
+      - "throughput stays above floor"
+    tooling: "pg_locks, pg_stat_activity, k6"
+
+  - id: 38
+    name: Distributed Locks
+    layer: data
+    priority: P0
+    invariant: "Mutual exclusion holds under partition and pause; lock TTL exceeds the critical section; stale holders are fenced."
+    break_it: "SIGSTOP a holder past TTL, then resume; partition the lock service."
+    assert:
+      - "two simultaneous holders impossible or fenced"
+      - "TTL renewed by heartbeat"
+      - "lock released on process death"
+      - "Redlock caveats documented and accepted"
+    tooling: "Redis/etcd, SIGSTOP, fencing tokens"
+
+  - id: 39
+    name: Race Conditions
+    layer: data
+    priority: P0
+    invariant: "Concurrent operations preserve business invariants: no double spend, no oversell, no negative balance."
+    break_it: "1000 parallel decrements of a stock of 100; parallel coupon redemption."
+    assert:
+      - "exactly 100 successes"
+      - "final stock == 0, never negative"
+      - "DB CHECK/unique constraint as backstop"
+      - "no 5xx under contention"
+    tooling: "k6, SQL asserts, fast-check"
+
+  - id: 40
+    name: Deadlocks
+    layer: data
+    priority: P0
+    invariant: "Deadlocks are detected, retried transparently, and rare; lock ordering is documented."
+    break_it: "Two transactions lock rows in opposite order; run under load."
+    assert:
+      - "DB kills one, app retries, request succeeds"
+      - "no user-visible 500"
+      - "deadlock rate < 0.1% of transactions"
+      - "lock order documented in code"
+    tooling: "Postgres logs, retry middleware"
+
+  - id: 41
+    name: Memory Leaks
+    layer: runtime
+    priority: P0
+    invariant: "RSS and heap are stable over a 24 h soak; listeners, connections, and caches do not grow without bound."
+    break_it: "24 h soak at 2x expected traffic; repeat the suspect endpoint 100k times."
+    assert:
+      - "RSS slope ~ 0 after warm-up"
+      - "heap after forced GC < threshold"
+      - "FD/connection counts flat"
+      - "heap snapshot diff shows no growing retainers"
+    tooling: "k6, clinic/pprof, Grafana"
+
+  - id: 42
+    name: Garbage Collection
+    layer: runtime
+    priority: P1
+    invariant: "GC pauses stay inside the latency budget and allocation rate does not cause GC thrash."
+    break_it: "Hit the highest-allocation endpoint at 3x load."
+    assert:
+      - "GC pause p99 < 50 ms"
+      - "no full GC more than N/min"
+      - "heap occupancy sawtooths, no upward trend"
+      - "p99 latency not correlated with GC spikes"
+    tooling: "pprof, JFR, --trace-gc"
+
+  - id: 43
+    name: Thread Safety
+    layer: runtime
+    priority: P0
+    invariant: "Shared mutable state is synchronized; race detectors are clean under concurrent load."
+    break_it: "Run the test suite with -race/TSAN plus a 1000-goroutine hammer."
+    assert:
+      - "race detector reports zero races"
+      - "counters exact under concurrency"
+      - "no torn reads of shared config"
+    tooling: "go test -race, TSAN, loom"
+
+  - id: 44
+    name: Backpressure
+    layer: resilience
+    priority: P0
+    invariant: "When a downstream slows, the producer slows or sheds load; queues stay bounded and memory does not grow."
+    break_it: "Make the consumer 10x slower; publish 100k events."
+    assert:
+      - "queue depth bounded"
+      - "429/503 shedding instead of OOM"
+      - "latency bounded, not linear in backlog"
+      - "recovery drains without a stampede"
+    tooling: "Toxiproxy, k6, queue metrics"
+
+  - id: 45
+    name: Autoscaling
+    layer: runtime
+    priority: P1
+    invariant: "Scale-out happens before SLO breach, scale-in drops no requests, and the system does not flap."
+    break_it: "Ramp 0 -> 10x in 2 min, hold, then drop to 0 in 1 min."
+    assert:
+      - "capacity added before p95 breach"
+      - "zero 5xx during scale events"
+      - "cooldown prevents flapping"
+      - "cost per request recorded"
+    tooling: "HPA/KEDA, k6, Prometheus"
+
+  - id: 46
+    name: Horizontal Scaling
+    layer: runtime
+    priority: P0
+    invariant: "The app is stateless: any instance serves any request, and throughput grows near-linearly with replicas."
+    break_it: "Route the same session to different pods; kill a pod mid-session; run 1 vs 4 replicas."
+    assert:
+      - "no sticky-session dependency"
+      - "sessions/cache externalized"
+      - "throughput ~ linear to 80% of N"
+      - "no per-instance local state"
+    tooling: "k6, pod disruption, session store"
+
+  - id: 47
+    name: Vertical Scaling
+    layer: runtime
+    priority: P2
+    invariant: "A larger instance improves p95 without regressions, and the app respects memory/CPU limits."
+    break_it: "Run identical load on 2 sizes; set a tight memory limit."
+    assert:
+      - "throughput gain and p95 drop measured"
+      - "no OOMKill at the limit"
+      - "no CPU throttling in the good configuration"
+      - "cost per request compared"
+    tooling: "two node pools, k6, cgroup metrics"
+
+  - id: 48
+    name: CDN
+    layer: delivery
+    priority: P0
+    invariant: "Static assets are cached at the edge with correct TTLs, the origin is shielded, and purge is effective."
+    break_it: "Request an asset from 3 regions; purge; take the origin down."
+    assert:
+      - "X-Cache HIT after warm-up"
+      - "hashed assets immutable, HTML short TTL"
+      - "origin request count low under load"
+      - "stale-if-error serves during origin outage"
+    tooling: "Cloudflare/Fastly, curl -I, k6"
+
+  - id: 49
+    name: Edge Caching
+    layer: delivery
+    priority: P0
+    invariant: "Personalized or authenticated responses are never cached at the edge; Vary and cache keys are correct."
+    break_it: "Request the same URL as user A then user B; check Vary and Set-Cookie handling."
+    assert:
+      - "no cross-user data leakage"
+      - "private/no-store on PII"
+      - "Vary: Cookie/Authorization or key includes identity"
+      - "geo variance only where intended"
+    tooling: "two sessions, curl, CDN logs"
+
+  - id: 50
+    name: Cache Invalidation
+    layer: delivery
+    priority: P0
+    invariant: "After a write, readers see fresh data within the documented bound; no key is stale forever."
+    break_it: "Update a record, read immediately, break the purge path."
+    assert:
+      - "TTL + explicit purge both exist"
+      - "versioned keys or surrogate keys"
+      - "stale window <= bound"
+      - "invalidation storm does not melt the origin"
+    tooling: "cache-tag purge, k6, origin logs"
+
+  - id: 51
+    name: Feature Flags
+    layer: delivery
+    priority: P0
+    invariant: "Flag off reproduces old behavior exactly; a flip takes effect in < 1 s; provider outage fails safe."
+    break_it: "Flip under load; kill the flag provider; send a user with a stale cached flag."
+    assert:
+      - "default is the safe/old path"
+      - "evaluation p99 < 10 ms"
+      - "assignment is consistent per user"
+      - "fallback value on provider outage"
+      - "flag cleanup ticket exists"
+    tooling: "LaunchDarkly/Unleash, k6, kill switch test"
+
+  - id: 52
+    name: Blue-Green Deployment
+    layer: delivery
+    priority: P0
+    invariant: "Cutover and rollback are instant, both colors share a compatible schema, and no request is dropped."
+    break_it: "Cut over under load, then roll back 60 s later."
+    assert:
+      - "zero 5xx and zero dropped connections"
+      - "rollback < 60 s"
+      - "migrations are expand/contract, backward compatible"
+      - "smoke suite gates the cutover"
+    tooling: "two environments, k6, migration linter"
+
+  - id: 53
+    name: Canary Releases
+    layer: delivery
+    priority: P0
+    invariant: "Canary sees a small, stable share of traffic; SLO breach triggers automatic rollback; users are not randomly flipped back and forth."
+    break_it: "Inject 10% errors in the canary; flip a user between versions."
+    assert:
+      - "traffic split within +/-2% of target"
+      - "rollback < 5 min after breach"
+      - "assignment sticky per user/session"
+      - "error budget burn recorded"
+    tooling: "Argo Rollouts/Flagger, Prometheus, k6"

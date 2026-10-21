@@ -1,0 +1,65 @@
+{
+  "$comment": "Everything project-specific lives here. Tests are generic; this file is the contract. Env vars override baseURL/crawl limits.",
+  "baseURL": "http://localhost:3000",
+  "crawl": {
+    "maxPages": 150,
+    "maxDepth": 4,
+    "concurrency": 6,
+    "exclude": [
+      "/logout",
+      "/signout",
+      "/cart",
+      "/checkout",
+      "/account/.*",
+      "/admin/.*",
+      "\\?.*(print|preview)="
+    ]
+  },
+  "requiredPaths": ["/", "/pricing", "/contact"],
+  "legal": {
+    "privacy": "/privacy",
+    "terms": "/terms"
+  },
+  "cta": {
+    "anyOf": ["Get started", "Start free", "Book a demo", "Sign up", "Contact us"]
+  },
+  "faq": {
+    "paths": ["/", "/faq"],
+    "requireFaqSchema": false
+  },
+  "seo": {
+    "titleMin": 15,
+    "titleMax": 60,
+    "descriptionMin": 50,
+    "descriptionMax": 160,
+    "ogImageMinWidth": 1200,
+    "ogImageMinHeight": 630
+  },
+  "consent": {
+    "bannerSelector": "",
+    "acceptSelector": "",
+    "rejectSelector": "",
+    "settingsSelector": ""
+  },
+  "analytics": {
+    "requestPatterns": ["google-analytics\\.com", "googletagmanager\\.com", "segment\\.io", "mixpanel\\.com", "posthog\\.com", "plausible\\.io", "hotjar\\.com", "clarity\\.ms", "facebook\\.net/.*fbevents"],
+    "cookiePatterns": ["^_ga", "^_gid", "^_fbp", "^_hj", "^mp_", "^ajs_", "^ph_"]
+  },
+  "forms": [],
+  "perf": {
+    "lcpMs": 2500,
+    "cls": 0.1,
+    "ttfbMs": 800,
+    "jsTransferKb": 350,
+    "runs": 3
+  },
+  "mobile": {
+    "minTapTargetPx": 24,
+    "minFontSizePx": 12,
+    "maxStickyHeaderViewportRatio": 0.25
+  },
+  "notFound": {
+    "markers": ["not found", "404", "page doesn't exist", "page not found"],
+    "frameworkDefaultPatterns": ["Cannot GET", "ENOENT", "Whitelabel Error Page", "nginx/", "Apache/"]
+  }
+}

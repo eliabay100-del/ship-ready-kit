@@ -1,0 +1,8 @@
+{
+  "id": "ord_01HZX8K5AA",
+  "status": "pending",
+  "amount": 1000,
+  "currency": "EUR",
+  "createdAt": "2026-02-01T08:30:00.000Z",
+  "items": [{ "sku": "SKU-9", "quantity": 1, "unitAmount": 1000 }]
+}

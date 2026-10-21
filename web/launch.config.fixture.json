@@ -1,0 +1,38 @@
+{
+  "baseURL": "http://localhost:4173",
+  "crawl": {
+    "maxPages": 50,
+    "maxDepth": 3,
+    "concurrency": 4,
+    "exclude": ["/old"]
+  },
+  "requiredPaths": ["/", "/pricing", "/contact"],
+  "legal": { "privacy": "/privacy", "terms": "/terms" },
+  "cta": { "anyOf": ["Get started", "Book a demo"] },
+  "faq": { "paths": ["/", "/faq"], "requireFaqSchema": false },
+  "seo": {
+    "titleMin": 15,
+    "titleMax": 60,
+    "descriptionMin": 50,
+    "descriptionMax": 160,
+    "ogImageMinWidth": 1200,
+    "ogImageMinHeight": 630
+  },
+  "consent": {
+    "bannerSelector": "#cookie-banner",
+    "acceptSelector": "#accept-consent",
+    "rejectSelector": "#reject-consent",
+    "settingsSelector": ""
+  },
+  "analytics": {
+    "requestPatterns": ["googletagmanager\\.com", "google-analytics\\.com"],
+    "cookiePatterns": ["^_ga", "^_gid"]
+  },
+  "forms": [],
+  "perf": { "lcpMs": 2500, "cls": 0.1, "ttfbMs": 800, "jsTransferKb": 350, "runs": 2 },
+  "mobile": { "minTapTargetPx": 24, "minFontSizePx": 12, "maxStickyHeaderViewportRatio": 0.25 },
+  "notFound": {
+    "markers": ["not found", "404"],
+    "frameworkDefaultPatterns": ["Cannot GET", "ENOENT", "Whitelabel Error Page", "nginx/"]
+  }
+}

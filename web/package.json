@@ -1,0 +1,31 @@
+{
+  "name": "ship-ready-web-audit",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Launch-gate audit for the 20 pre-launch website checks (SEO, a11y, consent, forms, links, perf).",
+  "scripts": {
+    "test": "playwright test",
+    "audit": "playwright test --reporter=list",
+    "test:fixtures": "node fixtures/run-fixtures.mjs",
+    "fixtures:serve": "node fixtures/site/server.mjs",
+    "test:crawl": "playwright test tests/01-crawl-and-links.spec.ts",
+    "test:seo": "playwright test tests/02-seo-and-metadata.spec.ts",
+    "test:a11y": "playwright test tests/03-accessibility.spec.ts",
+    "test:mobile": "playwright test tests/05-mobile-and-responsive.spec.ts",
+    "test:forms": "playwright test tests/06-forms.spec.ts",
+    "test:consent": "playwright test tests/07-consent-and-analytics.spec.ts",
+    "test:perf": "playwright test tests/08-performance-budgets.spec.ts",
+    "test:lhci": "lhci autorun",
+    "typecheck": "tsc --noEmit",
+    "report": "playwright show-report"
+  },
+  "devDependencies": {
+    "@axe-core/playwright": "^4.10.2",
+    "@lhci/cli": "^0.14.0",
+    "@playwright/test": "^1.51.0",
+    "@types/node": "^22.13.0",
+    "cheerio": "^1.0.0",
+    "typescript": "^5.7.3"
+  }
+}

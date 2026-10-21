@@ -1,0 +1,23 @@
+{
+  "name": "ship-ready-distributed-harness",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Executable invariant checks for the 53 distributed-systems concepts.",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "validate:matrix": "node scripts/validate-matrix.mjs",
+    "chaos": "tsx chaos/run-chaos.ts",
+    "pbt": "tsx --test property/*.test.ts",
+    "contract": "tsx --test contract/*.test.ts",
+    "test": "tsx --test property/*.test.ts contract/*.test.ts"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.0",
+    "fast-check": "^3.23.2",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.3",
+    "yaml": "^2.9.1",
+    "zod": "^3.24.1"
+  }
+}

@@ -1,0 +1,24 @@
+version: '3.9'
+
+# Toxiproxy in front of a stub upstream. Point your app's dependency URL at
+# http://localhost:8666 and run `chaos/run-chaos.ts` to prove timeouts,
+# circuit breakers, retries and recovery (systems checklist: 10, 11, 12, 13, 44).
+#
+#   docker compose -f distributed/chaos/docker-compose.yml up -d
+#   npx tsx distributed/chaos/run-chaos.ts
+
+services:
+  toxiproxy:
+    image: ghcr.io/shopify/toxiproxy:2.9.0
+    command: ['-host=0.0.0.0']
+    ports:
+      - '8474:8474' # control API
+      - '8666:8666' # proxy port
+
+  upstream:
+    image: mendhak/http-https-echo:31
+    environment:
+      HTTP_PORT: '8080'
+      LOG_WITHOUT_NEWLINE: 'true'
+    expose:
+      - '8080'

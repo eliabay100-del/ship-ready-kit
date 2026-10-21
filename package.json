@@ -1,0 +1,16 @@
+{
+  "name": "ship-ready-kit",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Executable launch gate: 20 website checks and 53 distributed-systems invariants.",
+  "license": "MIT",
+  "scripts": {
+    "setup": "npm --prefix web ci && npm --prefix distributed ci",
+    "test": "npm run test:fixtures",
+    "test:fixtures": "npm --prefix web run test:fixtures",
+    "typecheck": "npm --prefix web run typecheck && npm --prefix distributed run typecheck",
+    "validate:matrix": "npm --prefix distributed run validate:matrix",
+    "test:contract": "npm --prefix distributed run contract",
+    "security": "powershell -ExecutionPolicy Bypass -File security/run-security-scan.ps1 -Repo ."
+  }
+}
