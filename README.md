@@ -5,6 +5,7 @@ distributed-systems invariants**, each expressed as an automated test, a
 scheduled drill, or a written waiver. It ships with a reference site that proves
 the suite itself works.
 
+![CI](https://github.com/eliabay100-del/ship-ready-kit/actions/workflows/ci.yml/badge.svg)
 ![license: MIT](https://img.shields.io/badge/license-MIT-blue.svg)
 
 This is not a reading list. Every row has an observable assertion and a command
@@ -33,7 +34,7 @@ that can fail.
 ## Quick start: audit a site
 
 ```bash
-git clone <this-repo-url> ship-ready-kit
+git clone https://github.com/eliabay100-del/ship-ready-kit.git ship-ready-kit
 cd ship-ready-kit/web
 npm install
 npx playwright install chromium
